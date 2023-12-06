@@ -13,3 +13,4 @@ python visualize.py
 ### To Do
 - Improvement on speed
 - Add sparse operation
+- Add benchmarking
