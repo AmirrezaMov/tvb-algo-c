@@ -12,12 +12,12 @@ using namespace std;
 
 typedef std::chrono::high_resolution_clock Time;
 
-/* Defining dynamic simulation parameters */
+/* Defining simulation parameters */
 #define N           76                                          // Number of nodes
 #define M           2                                           // Number of state variables per node
 #define dt          0.05                                        // Timestep    
 #define tf          150.0                                       // Final time of the simulation
-#define speed       1.0                                         // Speed of conductance
+#define speed       4.0                                         // Speed of conductance
 #define freq        1.0                                         // frequency
 #define k           0.001                                       // Constant used in post function
 #define lam         0.1                                         // LAM in colored noise
@@ -29,10 +29,13 @@ typedef std::chrono::high_resolution_clock Time;
 #define G(i, x)     sqrt(1e-9)                                  // Additive Linear Noise
 /* END */
 
+#define USE_SPARSE  true                                        // Whether to use sparse calculation for coupling
+
 float Xs[(int) (tf/dt)][N][M] = {0.0};  // The values of state variables of nodes throughout the simulation
 float e[N][M];                          // Noise value for each state variable
 
 void calculate_coupling(int i, int n, float W[N], int D[N], float& coupling); // naive coupling calculation
+void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w, int* d, int* r, int* col, int* nzr, int* lri, float& coupling); // coupling calculation using sparse characteristic
 void step(int i, int n, float coupling);
 
 int main(){
@@ -78,11 +81,12 @@ int main(){
     int* d = (int *) malloc(nzr_W * sizeof(int)); // delays associated with non-zero weights
     int* r = (int *) malloc(nzr_W * sizeof(int)); // rows of the non-zero weights
     int* c = (int *) malloc(nzr_W * sizeof(int)); // columns of the non-zero weights
-    int* nzr = (int *) malloc(nzr_c * sizeof(int)); // rows with non-zero element
+    int* nzr = (int *) malloc(N * sizeof(int)); // for each node n, lri[nzr[n]] is the beginning of corresponding weights of n in w array
     int* lri = (int *) malloc(nzr_c * sizeof(int)); // local reduction indices -> indexes of r in which the value is different from the value of previous index
 
     int index = 0;
     int index_nzr = 0;
+    int i_deduct = 0;
     for(int i = 0; i < N; i++){
         bool nzr_c_flag = false; // if the row has non-zero element
         for(int j = 0; j < N; j++){
@@ -96,8 +100,12 @@ int main(){
             }
         }
         if(nzr_c_flag){
-            nzr[index_nzr] = i;
+            nzr[index_nzr] = i - i_deduct;
             index_nzr++;
+        } else{
+            nzr[index_nzr] = -1;
+            index_nzr++;
+            i_deduct++;
         }
     }
 
@@ -110,7 +118,6 @@ int main(){
             temp = r[i];
         }
     }
-
 
     std::cout << "Pre-processing: " << chrono::duration<double, std::milli>(Time::now() - tick).count() << " ms" << std::endl;
     /* END: Extract the Weight and Distance data from files */
@@ -146,7 +153,8 @@ int main(){
         else{
             for(int n = 0; n < N; n++){
                 float coupling;
-                calculate_coupling(i, n, W[n], D[n], coupling);
+                if(USE_SPARSE)  calculate_coupling_sparse(i, n, nzr_W, nzr_c, w, d, r, c, nzr, lri, coupling);
+                else            calculate_coupling(i, n, W[n], D[n], coupling);
                 step(i, n, coupling);
                 float h[M];
                 h[0] = sqrt(G(i, Xs[i][n][0]) * lam * (1.0 - pow(E, 2))) * randn(gen);
@@ -188,10 +196,37 @@ void calculate_coupling(int i, int n, float W[N], int D[N], float& coupling){
     coupling = POST(c);
 }
 
+void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w, int* d, int* r, int* col, int* nzr, int* lri, float& coupling){
+    int lri_index = nzr[n];
+
+    if(lri_index == -1){
+        coupling = 0;
+        return;
+    }
+    
+    int index_start = lri[lri_index];
+    int index_stop;
+    if(lri_index == (nzr_size - 1)) index_stop = w_size;
+    else                            index_stop = lri[lri_index + 1];
+
+
+    float c = 0.0;
+    for(int j = index_start; j < index_stop; j++){
+        if(i < d[j]){
+            c += w[j] * PRE(Xs[i - 1][n][0], 0.0);
+        } else{
+            if(d[j] == 0)   c += w[j] * PRE(Xs[i - 1][n][0], Xs[i - 1][col[j]][0]);
+            else            c += w[j] * PRE(Xs[i - 1][n][0], Xs[i - d[j]][col[j]][0]);
+        }
+    }
+
+    coupling = POST(c);
+}
+
 void step(int i, int n, float coupling){
     float x = Xs[i-1][n][0];
     float y = Xs[i-1][n][1];
-    float dx = dt * (FDX(x, y) + e[n][0]);
+    float dx = dt * (FDX(x, y)); //dt * (FDX(x, y) + e[n][0]);
     float dy = dt * (FDY(x, coupling) + e[n][1]);
     Xs[i][n][0] = x + dx;
     Xs[i][n][1] = y + dy;
