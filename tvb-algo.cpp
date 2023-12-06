@@ -17,7 +17,7 @@ typedef std::chrono::high_resolution_clock Time;
 #define M           2                                           // Number of state variables per node
 #define dt          0.05                                        // Timestep    
 #define tf          150.0                                       // Final time of the simulation
-#define speed       4.0                                         // Speed of conductance
+#define speed       1.0                                         // Speed of conductance
 #define freq        1.0                                         // frequency
 #define k           0.001                                       // Constant used in post function
 #define lam         0.1                                         // LAM in colored noise
@@ -176,11 +176,13 @@ int main(){
 void calculate_coupling(int i, int n, float W[N], int D[N], float& coupling){
     float c = 0.0;
     for(int j = 0; j < N; j++){
-        if(i < D[j]){
-            c += W[j] * PRE(Xs[i - 1][n][0], 0.0);
-        } else{
-            if(n == j)  c += W[j] * PRE(Xs[i - 1][n][0], Xs[i - 1][j][0]);
-            else        c += W[j] * PRE(Xs[i - 1][n][0], Xs[i - D[j]][j][0]);
+        if(W[j] != 0){
+            if(i < D[j]){
+                c += W[j] * PRE(Xs[i - 1][n][0], 0.0);
+            } else{
+                if(n == j)  c += W[j] * PRE(Xs[i - 1][n][0], Xs[i - 1][j][0]);
+                else        c += W[j] * PRE(Xs[i - 1][n][0], Xs[i - D[j]][j][0]);
+            }
         }
     }
     coupling = POST(c);
