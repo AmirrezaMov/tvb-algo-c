@@ -24,9 +24,12 @@ for line in f:
 
 t = np.arange(0, int(tf/dt), 1)
 
+
+figure(figsize=(12, 6))
 plot(t[::5] * dt , xs[::5, :], 'k', alpha=0.3)
 grid(True, axis='x')
 xlim([0, t[-1] * dt])
+tight_layout()
 show()
 
 f.close()

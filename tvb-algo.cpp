@@ -15,24 +15,32 @@ typedef std::chrono::high_resolution_clock Time;
 /* Defining simulation parameters */
 #define N           76                                          // Number of nodes
 #define M           2                                           // Number of state variables per node
-#define dt          0.05                                        // Timestep    
-#define tf          150.0                                       // Final time of the simulation
-#define speed       4.0                                         // Speed of conductance
-#define freq        1.0                                         // frequency
-#define k           0.001                                       // Constant used in post function
-#define lam         0.1                                         // LAM in colored noise
+#define dt          0.05f                                       // Timestep    
+#define tf          150.0f                                      // Final time of the simulation
+#define speed       2.0f                                        // Speed of conductance
+#define freq        1.0f                                        // frequency
+#define k           0.001f                                      // Constant used in post function
+#define lam         0.1f                                        // LAM in colored noise
 #define E           exp(-lam * dt)                              // Constant E in colored noise
-#define PRE(i, j)   (j - 1.0)                                   // pre-synapse function
+#define PRE(i, j)   (j - 1.0f)                                  // pre-synapse function
 #define POST(gx)    (k * gx)                                    // post-synapse function
-#define FDX(x, y)   freq * (x - (pow(x, 3)/3.0) + y) * 3.0      // Local dynamic of first state variable
-#define FDY(x, c)   freq * (1.01 - x + c) / 3.0                 // Local dynamic of second state variable
-#define G(i, x)     sqrt(1e-9)                                  // Additive Linear Noise
+#define FDX(x, y)   freq * (x - (pow(x, 3)/3.0f) + y) * 3.0f    // Local dynamic of first state variable
+#define FDY(x, c)   freq * (1.01f - x + c) / 3.0f               // Local dynamic of second state variable
+#define G(i, x)     sqrt(1e-9f)                                 // Additive Linear Noise
 /* END */
 
 #define USE_SPARSE  true                                        // Whether to use sparse calculation for coupling
+#define BENCHMARK   true                                        // Whether to do benchmarking
 
-float Xs[(int) (tf/dt)][N][M] = {0.0};  // The values of state variables of nodes throughout the simulation
+float Xs[(int) (tf/dt)][N][M] = {0.0f}; // The values of state variables of nodes throughout the simulation
 float e[N][M];                          // Noise value for each state variable
+
+/* Benchmark variables */
+float coupling_time = 0.0f;
+int   coupling_time_n = 0;
+float step_time = 0.0f;
+int   step_time_n = 0; 
+/* END */
 
 void calculate_coupling(int i, int n, float W[N], int D[N], float& coupling); // naive coupling calculation
 void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w, int* d, int* r, int* col, int* nzr, int* lri, float& coupling); // coupling calculation using sparse characteristic
@@ -119,7 +127,7 @@ int main(){
         }
     }
 
-    std::cout << "Pre-processing: " << chrono::duration<double, std::milli>(Time::now() - tick).count() << " ms" << std::endl;
+    cout << "Pre-processing: " << chrono::duration<double, std::milli>(Time::now() - tick).count() << " ms" << endl;
     /* END: Extract the Weight and Distance data from files */
 
     /* Simulation */
@@ -165,10 +173,25 @@ int main(){
         }
     }
 
-    std::cout << "Simulation: " << chrono::duration<double, std::milli>(Time::now() - tick).count() << " ms" << std::endl;
+    cout << "Simulation: " << chrono::duration<double, std::milli>(Time::now() - tick).count() << " ms" << endl;
     /* END: Simulation */
 
+    
+    /* Print Benchmark Results */
+
+    if(BENCHMARK){
+        cout << "Average time spent in COUPLING function: " << (float)(coupling_time/coupling_time_n) << " ms" << endl;
+        cout << "Average time spent in STEP function: " << (float)(step_time/step_time_n) << " ms" << endl;
+    }
+
+    /* END: Print Benchmark Results */
+
+
+    
+    /* Write the results to the file */
+
     ofstream file_xs("xs.txt");
+    file_xs << fixed << setprecision(10);
     for(int n = 0; n < N; n++){
         for(int i = 0; i < (int) (tf/dt); i++){
             file_xs << Xs[i][n][0] << endl;
@@ -176,12 +199,16 @@ int main(){
         file_xs << "-" << endl;
     }
 
+    /* END: Write the results to the file */
+
     file_w.close();
     file_d.close();
     file_xs.close();
 }
 
 void calculate_coupling(int i, int n, float W[N], int D[N], float& coupling){
+    auto tick = Time::now();
+    
     float c = 0.0;
     for(int j = 0; j < N; j++){
         if(W[j] != 0){
@@ -194,9 +221,14 @@ void calculate_coupling(int i, int n, float W[N], int D[N], float& coupling){
         }
     }
     coupling = POST(c);
+    
+    coupling_time += chrono::duration<double, std::milli>(Time::now() - tick).count();
+    coupling_time_n++;
 }
 
 void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w, int* d, int* r, int* col, int* nzr, int* lri, float& coupling){
+    auto tick = Time::now();
+    
     int lri_index = nzr[n];
 
     if(lri_index == -1){
@@ -204,6 +236,7 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w,
         return;
     }
     
+
     int index_start = lri[lri_index];
     int index_stop;
     if(lri_index == (nzr_size - 1)) index_stop = w_size;
@@ -221,13 +254,21 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w,
     }
 
     coupling = POST(c);
+    
+    coupling_time += chrono::duration<double, std::milli>(Time::now() - tick).count();
+    coupling_time_n++;
 }
 
 void step(int i, int n, float coupling){
+    auto tick = Time::now();
+
     float x = Xs[i-1][n][0];
     float y = Xs[i-1][n][1];
-    float dx = dt * (FDX(x, y)); //dt * (FDX(x, y) + e[n][0]);
+    float dx = dt * (FDX(x, y) + e[n][0]);
     float dy = dt * (FDY(x, coupling) + e[n][1]);
     Xs[i][n][0] = x + dx;
     Xs[i][n][1] = y + dy;
+
+    step_time += chrono::duration<double, std::milli>(Time::now() - tick).count();
+    step_time_n++;
 }
