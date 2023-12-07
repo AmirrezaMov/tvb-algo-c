@@ -226,7 +226,7 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, float* w,
 void step(int i, int n, float coupling){
     float x = Xs[i-1][n][0];
     float y = Xs[i-1][n][1];
-    float dx = dt * (FDX(x, y)); //dt * (FDX(x, y) + e[n][0]);
+    float dx = dt * (FDX(x, y) + e[n][0]);
     float dy = dt * (FDY(x, coupling) + e[n][1]);
     Xs[i][n][0] = x + dx;
     Xs[i][n][1] = y + dy;
