@@ -7,6 +7,9 @@
 #include <chrono>
 #include "math.h"
 #include <random>
+#include "fpm/fixed.hpp"
+#include "fpm/math.hpp"
+#include "fpm/ios.hpp"
 
 using namespace std;
 
@@ -30,7 +33,7 @@ typedef std::chrono::high_resolution_clock Time;
 /* END */
 
 #define USE_SPARSE  true                                        // Whether to use sparse calculation for coupling
-#define BENCHMARK   true                                        // Whether to do benchmarking
+#define BENCHMARK   false                                        // Whether to do benchmarking
 
 float Xs[(int) (tf/dt)][N][M] = {0.0f}; // The values of state variables of nodes throughout the simulation
 float e[N][M];                          // Noise value for each state variable
@@ -50,6 +53,11 @@ int main(){
 
     /* Extract the Weight and Distance data from files */
     auto tick = Time::now();
+
+    fpm::fixed_16_16 fx  {12.762};
+    fpm::fixed_16_16 fy  {13.9065};
+
+    cout << fx * fy << endl;
 
     ifstream file_w("./data/tvb76_w.txt");
     ifstream file_d("./data/tvb76_d.txt");
