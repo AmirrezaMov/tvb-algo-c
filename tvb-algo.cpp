@@ -18,27 +18,27 @@ typedef std::chrono::high_resolution_clock Time;
 /* Defining simulation parameters */
 #define N           76                                          // Number of nodes
 #define M           2                                           // Number of state variables per node
-#define dt          static_cast<f24>(0.05f)                                       // Timestep    
+#define dt          static_cast<fp>(0.05f)                                       // Timestep    
 #define tf          150.0f                                      // Final time of the simulation
-#define speed       static_cast<f24>(2.0f)                                        // Speed of conductance
-#define freq        static_cast<f24>(1.0f)                                        // frequency
-#define k           static_cast<f24>(0.001)                                      // Constant used in post function
-#define lam         static_cast<f24>(0.1f)                                        // LAM in colored noise
+#define speed       static_cast<fp>(10.0f)                                        // Speed of conductance
+#define freq        static_cast<fp>(1.0f)                                        // frequency
+#define k           static_cast<fp>(0.001)                                      // Constant used in post function
+#define lam         static_cast<fp>(0.1f)                                        // LAM in colored noise
 #define E           exp(-lam * dt)                              // Constant E in colored noise
-#define PRE(i, j)   (j - static_cast<f24>(1.0))                                  // pre-synapse function
+#define PRE(i, j)   (j - static_cast<fp>(1.0))                                  // pre-synapse function
 #define POST(gx)    (k * gx)                                    // post-synapse function
-#define FDX(x, y)   freq * (x - (pow(x, 3)/static_cast<f24>(3.0f)) + y) * static_cast<f24>(3.0f)    // Local dynamic of first state variable
-#define FDY(x, c)   freq * (static_cast<f24>(1.01f) - x + c) / static_cast<f24>(3.0f)               // Local dynamic of second state variable
+#define FDX(x, y)   freq * (x - (pow(x, 3)/static_cast<fp>(3.0f)) + y) * static_cast<fp>(3.0f)    // Local dynamic of first state variable
+#define FDY(x, c)   freq * (static_cast<fp>(1.01f) - x + c) / static_cast<fp>(3.0f)               // Local dynamic of second state variable
 #define G(i, x)     sqrt(1e-9f)                                 // Additive Linear Noise
 /* END */
 
 #define USE_SPARSE  true                                        // Whether to use sparse calculation for coupling
 #define BENCHMARK   false                                        // Whether to do benchmarking
 
-typedef fpm::fixed_8_24 f24;
+typedef fpm::fixed_16_16 fp;
 
-f24 Xs[(int) (tf/static_cast<float>(dt))][N][M];  // The values of state variables of nodes throughout the simulation
-f24 e[N][M];                          // Noise value for each state variable
+fp Xs[(int) (tf/static_cast<float>(dt))][N][M];  // The values of state variables of nodes throughout the simulation
+fp e[N][M];                          // Noise value for each state variable
 
 /* Benchmark variables */
 float coupling_time = 0.0f;
@@ -47,11 +47,13 @@ float step_time = 0.0f;
 int   step_time_n = 0; 
 /* END */
 
-void calculate_coupling(int i, int n, f24 W[N], int D[N], f24& coupling); // naive coupling calculation
-void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, f24* w, int* d, int* r, int* col, int* nzr, int* lri, f24& coupling); // coupling calculation using sparse characteristic
-void step(int i, int n, f24 coupling);
+void calculate_coupling(int i, int n, fp W[N], int D[N], fp& coupling); // naive coupling calculation
+void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, fp* w, int* d, int* r, int* col, int* nzr, int* lri, fp& coupling); // coupling calculation using sparse characteristic
+void step(int i, int n, fp coupling);
 
 int main(){
+
+    cout << "Fixed Point Simulation Q8.24" << endl;
 
     /* Extract the Weight and Distance data from files */
     auto tick = Time::now();
@@ -59,7 +61,7 @@ int main(){
     ifstream file_w("./data/tvb76_w.txt");
     ifstream file_d("./data/tvb76_d.txt");
 
-    f24 W[N][N]; // Weight matrix
+    fp W[N][N]; // Weight matrix
     int D[N][N]; // Delay matrix in timestep -> Extracted from (distance matrix / speed) / dt
     int nzr_W = 0; // Number of non-zero elements in W
     int nzr_c = 0; // Number of rows with non-zero element
@@ -78,10 +80,10 @@ int main(){
             getline(stream_w, temp_w, ' ');
             getline(stream_d, temp_d, ' ');
 
-            W[i][j]  = static_cast<f24>(atof(temp_w.c_str()));
-            D[i][j] = (int) ((static_cast<f24>(atof(temp_d.c_str())) / speed)/dt);
+            W[i][j]  = static_cast<fp>(atof(temp_w.c_str()));
+            D[i][j] = (int) ((static_cast<fp>(atof(temp_d.c_str())) / speed)/dt);
 
-            if(W[i][j] != static_cast<f24>(0.0)){
+            if(W[i][j] != static_cast<fp>(0.0)){
                 nzr_W++;
                 nzr_c_flag = true;
             }
@@ -90,7 +92,7 @@ int main(){
         if(nzr_c_flag) nzr_c++;
     }
 
-    f24* w = (f24 *) malloc(nzr_W * sizeof(f24)); // non-zero weights
+    fp* w = (fp *) malloc(nzr_W * sizeof(fp)); // non-zero weights
     int* d = (int *) malloc(nzr_W * sizeof(int)); // delays associated with non-zero weights
     int* r = (int *) malloc(nzr_W * sizeof(int)); // rows of the non-zero weights
     int* c = (int *) malloc(nzr_W * sizeof(int)); // columns of the non-zero weights
@@ -103,7 +105,7 @@ int main(){
     for(int i = 0; i < N; i++){
         bool nzr_c_flag = false; // if the row has non-zero element
         for(int j = 0; j < N; j++){
-            if(W[i][j] != static_cast<f24>(0.0)){
+            if(W[i][j] != static_cast<fp>(0.0)){
                 w[index] = W[i][j];
                 d[index] = D[i][j];
                 r[index] = i;
@@ -146,34 +148,34 @@ int main(){
     for(int i = 0; i < (int) (tf/static_cast<float>(dt)); i++){
         if(i == 0){
             for(int n = 0; n < N; n++){
-                Xs[i][n][0] = static_cast<f24>(-1.0);
-                Xs[i][n][1] = static_cast<f24>(-1.0);
-                e[n][0] = fpm::sqrt(static_cast<f24>(G(i, Xs[i][n][0])) * static_cast<f24>(lam)) * static_cast<f24>(randn(gen));
-                e[n][1] = fpm::sqrt(static_cast<f24>(G(i, Xs[i][n][1])) * static_cast<f24>(lam)) * static_cast<f24>(randn(gen));
+                Xs[i][n][0] = static_cast<fp>(-1.0);
+                Xs[i][n][1] = static_cast<fp>(-1.0);
+                e[n][0] = fpm::sqrt(static_cast<fp>(G(i, Xs[i][n][0])) * static_cast<fp>(lam)) * static_cast<fp>(randn(gen));
+                e[n][1] = fpm::sqrt(static_cast<fp>(G(i, Xs[i][n][1])) * static_cast<fp>(lam)) * static_cast<fp>(randn(gen));
             }
         }
         else if(i == 1){
             for(int n = 0; n < N; n++){
-                Xs[i][n][0] = ((((f24) rand()/RAND_MAX))/static_cast<f24>(5.0)) + static_cast<f24>(1.0);
-                Xs[i][n][1] = ((((f24) rand()/RAND_MAX))/static_cast<f24>(5.0)) - static_cast<f24>(0.6);
-                f24 h[M];
-                h[0] = fpm::sqrt(static_cast<f24>(G(i, Xs[i][n][0]))) * static_cast<f24>(lam) * (static_cast<f24>(1.0) - fpm::pow(static_cast<f24>(E), 2)) * static_cast<f24>(randn(gen));
-                h[1] = fpm::sqrt(static_cast<f24>(G(i, Xs[i][n][1]))) * static_cast<f24>(lam) * (static_cast<f24>(1.0) - fpm::pow(static_cast<f24>(E), 2)) * static_cast<f24>(randn(gen));
-                e[n][0] = (e[n][0] * static_cast<f24>(E)) + h[0];
-                e[n][1] = (e[n][1] * static_cast<f24>(E)) + h[1];
+                Xs[i][n][0] = ((((fp) rand()/RAND_MAX))/static_cast<fp>(5.0)) + static_cast<fp>(1.0);
+                Xs[i][n][1] = ((((fp) rand()/RAND_MAX))/static_cast<fp>(5.0)) - static_cast<fp>(0.6);
+                fp h[M];
+                h[0] = fpm::sqrt(static_cast<fp>(G(i, Xs[i][n][0]))) * static_cast<fp>(lam) * (static_cast<fp>(1.0) - fpm::pow(static_cast<fp>(E), 2)) * static_cast<fp>(randn(gen));
+                h[1] = fpm::sqrt(static_cast<fp>(G(i, Xs[i][n][1]))) * static_cast<fp>(lam) * (static_cast<fp>(1.0) - fpm::pow(static_cast<fp>(E), 2)) * static_cast<fp>(randn(gen));
+                e[n][0] = (e[n][0] * static_cast<fp>(E)) + h[0];
+                e[n][1] = (e[n][1] * static_cast<fp>(E)) + h[1];
             }
         }
         else{
             for(int n = 0; n < N; n++){
-                f24 coupling;
+                fp coupling;
                 if(USE_SPARSE)  calculate_coupling_sparse(i, n, nzr_W, nzr_c, w, d, r, c, nzr, lri, coupling);
                 else            calculate_coupling(i, n, W[n], D[n], coupling);
                 step(i, n, coupling);
-                f24 h[M];
-                h[0] = fpm::sqrt(static_cast<f24>(G(i, Xs[i][n][0]))) * static_cast<f24>(lam) * (static_cast<f24>(1.0) - fpm::pow(static_cast<f24>(E), 2)) * static_cast<f24>(randn(gen));
-                h[1] = fpm::sqrt(static_cast<f24>(G(i, Xs[i][n][1]))) * static_cast<f24>(lam) * (static_cast<f24>(1.0) - fpm::pow(static_cast<f24>(E), 2)) * static_cast<f24>(randn(gen));
-                e[n][0] = (e[n][0] * static_cast<f24>(E)) + h[0];
-                e[n][1] = (e[n][1] * static_cast<f24>(E)) + h[1];
+                fp h[M];
+                h[0] = fpm::sqrt(static_cast<fp>(G(i, Xs[i][n][0]))) * static_cast<fp>(lam) * (static_cast<fp>(1.0) - fpm::pow(static_cast<fp>(E), 2)) * static_cast<fp>(randn(gen));
+                h[1] = fpm::sqrt(static_cast<fp>(G(i, Xs[i][n][1]))) * static_cast<fp>(lam) * (static_cast<fp>(1.0) - fpm::pow(static_cast<fp>(E), 2)) * static_cast<fp>(randn(gen));
+                e[n][0] = (e[n][0] * static_cast<fp>(E)) + h[0];
+                e[n][1] = (e[n][1] * static_cast<fp>(E)) + h[1];
             }
         }
     }
@@ -211,33 +213,33 @@ int main(){
     file_xs.close();
 }
 
-void calculate_coupling(int i, int n, f24 W[N], int D[N], f24& coupling){
+void calculate_coupling(int i, int n, fp W[N], int D[N], fp& coupling){
     auto tick = Time::now();
     
-    f24 c {0.0};
+    fp c {0.0};
     for(int j = 0; j < N; j++){
-        if(W[j] != static_cast<f24>(0.0)){
+        if(W[j] != static_cast<fp>(0.0)){
             if(i < D[j]){
-                c += W[j] * static_cast<f24>(PRE(Xs[i - 1][n][0], static_cast<f24>(0.0)));
+                c += W[j] * static_cast<fp>(PRE(Xs[i - 1][n][0], static_cast<fp>(0.0)));
             } else{
-                if(n == j)  c += W[j] * static_cast<f24>(PRE(Xs[i - 1][n][0], Xs[i - 1][j][0]));
-                else        c += W[j] * static_cast<f24>(PRE(Xs[i - 1][n][0], Xs[i - D[j]][j][0]));
+                if(n == j)  c += W[j] * static_cast<fp>(PRE(Xs[i - 1][n][0], Xs[i - 1][j][0]));
+                else        c += W[j] * static_cast<fp>(PRE(Xs[i - 1][n][0], Xs[i - D[j]][j][0]));
             }
         }
     }
-    coupling = static_cast<f24>(POST(c));
+    coupling = static_cast<fp>(POST(c));
     
     coupling_time += chrono::duration<double, std::milli>(Time::now() - tick).count();
     coupling_time_n++;
 }
 
-void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, f24* w, int* d, int* r, int* col, int* nzr, int* lri, f24& coupling){
+void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, fp* w, int* d, int* r, int* col, int* nzr, int* lri, fp& coupling){
     auto tick = Time::now();
     
     int lri_index = nzr[n];
 
     if(lri_index == -1){
-        coupling = static_cast<f24>(0);
+        coupling = static_cast<fp>(0);
         return;
     }
     
@@ -248,10 +250,10 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, f24* w, i
     else                            index_stop = lri[lri_index + 1];
 
 
-    f24 c = static_cast<f24>(0.0);
+    fp c = static_cast<fp>(0.0);
     for(int j = index_start; j < index_stop; j++){
         if(i < d[j]){
-            c += w[j] * PRE(Xs[i - 1][n][0], static_cast<f24>(0.0));
+            c += w[j] * PRE(Xs[i - 1][n][0], static_cast<fp>(0.0));
         } else{
             if(d[j] == 0)   c += w[j] * PRE(Xs[i - 1][n][0], Xs[i - 1][col[j]][0]);
             else            c += w[j] * PRE(Xs[i - 1][n][0], Xs[i - d[j]][col[j]][0]);
@@ -264,13 +266,13 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, f24* w, i
     coupling_time_n++;
 }
 
-void step(int i, int n, f24 coupling){
+void step(int i, int n, fp coupling){
     auto tick = Time::now();
 
-    f24 x = Xs[i-1][n][0];
-    f24 y = Xs[i-1][n][1];
-    f24 dx = dt * (FDX(x, y) + e[n][0]);
-    f24 dy = dt * (FDY(x, coupling) + e[n][1]);
+    fp x = Xs[i-1][n][0];
+    fp y = Xs[i-1][n][1];
+    fp dx = dt * (FDX(x, y) + e[n][0]);
+    fp dy = dt * (FDY(x, coupling) + e[n][1]);
     Xs[i][n][0] = x + dx;
     Xs[i][n][1] = y + dy;
 
