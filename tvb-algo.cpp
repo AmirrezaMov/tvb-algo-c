@@ -20,7 +20,7 @@ typedef std::chrono::high_resolution_clock Time;
 #define M           2                                           // Number of state variables per node
 #define dt          static_cast<fp>(0.05f)                                       // Timestep    
 #define tf          150.0f                                      // Final time of the simulation
-#define speed       static_cast<fp>(10.0f)                                        // Speed of conductance
+#define speed       static_cast<fp>(4.0f)                                        // Speed of conductance
 #define freq        static_cast<fp>(1.0f)                                        // frequency
 #define k           static_cast<fp>(0.001)                                      // Constant used in post function
 #define lam         static_cast<fp>(0.1f)                                        // LAM in colored noise
@@ -197,7 +197,7 @@ int main(){
     
     /* Write the results to the file */
 
-    ofstream file_xs("xs.txt");
+    ofstream file_xs("xs-fp.txt");
     file_xs << fixed << setprecision(10);
     for(int n = 0; n < N; n++){
         for(int i = 0; i < (int) (tf/static_cast<float>(dt)); i++){
