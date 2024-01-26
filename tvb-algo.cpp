@@ -18,17 +18,17 @@ typedef std::chrono::high_resolution_clock Time;
 /* Defining simulation parameters */
 #define N           76                                          // Number of nodes
 #define M           2                                           // Number of state variables per node
-#define dt          0.05f                                       // Timestep    
+#define dt          static_cast<f24>(0.05f)                                       // Timestep    
 #define tf          150.0f                                      // Final time of the simulation
-#define speed       2.0f                                        // Speed of conductance
-#define freq        1.0f                                        // frequency
+#define speed       static_cast<f24>(2.0f)                                        // Speed of conductance
+#define freq        static_cast<f24>(1.0f)                                        // frequency
 #define k           static_cast<f24>(0.001)                                      // Constant used in post function
-#define lam         0.1f                                        // LAM in colored noise
+#define lam         static_cast<f24>(0.1f)                                        // LAM in colored noise
 #define E           exp(-lam * dt)                              // Constant E in colored noise
 #define PRE(i, j)   (j - static_cast<f24>(1.0))                                  // pre-synapse function
 #define POST(gx)    (k * gx)                                    // post-synapse function
-#define FDX(x, y)   freq * (x - (pow(x, 3)/3.0f) + y) * 3.0f    // Local dynamic of first state variable
-#define FDY(x, c)   freq * (1.01f - x + c) / 3.0f               // Local dynamic of second state variable
+#define FDX(x, y)   freq * (x - (pow(x, 3)/static_cast<f24>(3.0f)) + y) * static_cast<f24>(3.0f)    // Local dynamic of first state variable
+#define FDY(x, c)   freq * (static_cast<f24>(1.01f) - x + c) / static_cast<f24>(3.0f)               // Local dynamic of second state variable
 #define G(i, x)     sqrt(1e-9f)                                 // Additive Linear Noise
 /* END */
 
@@ -37,7 +37,7 @@ typedef std::chrono::high_resolution_clock Time;
 
 typedef fpm::fixed_8_24 f24;
 
-f24 Xs[(int) (tf/dt)][N][M];  // The values of state variables of nodes throughout the simulation
+f24 Xs[(int) (tf/static_cast<float>(dt))][N][M];  // The values of state variables of nodes throughout the simulation
 f24 e[N][M];                          // Noise value for each state variable
 
 /* Benchmark variables */
@@ -79,7 +79,7 @@ int main(){
             getline(stream_d, temp_d, ' ');
 
             W[i][j]  = static_cast<f24>(atof(temp_w.c_str()));
-            D[i][j] = (int) ((atof(temp_d.c_str()) / speed)/dt);
+            D[i][j] = (int) ((static_cast<f24>(atof(temp_d.c_str())) / speed)/dt);
 
             if(W[i][j] != static_cast<f24>(0.0)){
                 nzr_W++;
@@ -143,7 +143,7 @@ int main(){
     gen.seed(rd());
     normal_distribution randn{0.0, 1.0};
     
-    for(int i = 0; i < (int)(tf/dt); i++){
+    for(int i = 0; i < (int) (tf/static_cast<float>(dt)); i++){
         if(i == 0){
             for(int n = 0; n < N; n++){
                 Xs[i][n][0] = static_cast<f24>(-1.0);
@@ -198,7 +198,7 @@ int main(){
     ofstream file_xs("xs.txt");
     file_xs << fixed << setprecision(10);
     for(int n = 0; n < N; n++){
-        for(int i = 0; i < (int) (tf/dt); i++){
+        for(int i = 0; i < (int) (tf/static_cast<float>(dt)); i++){
             file_xs << Xs[i][n][0] << endl;
         }
         file_xs << "-" << endl;
@@ -237,7 +237,7 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, f24* w, i
     int lri_index = nzr[n];
 
     if(lri_index == -1){
-        coupling = 0;
+        coupling = static_cast<f24>(0);
         return;
     }
     
@@ -248,10 +248,10 @@ void calculate_coupling_sparse(int i, int n, int w_size, int nzr_size, f24* w, i
     else                            index_stop = lri[lri_index + 1];
 
 
-    f24 c = 0.0;
+    f24 c = static_cast<f24>(0.0);
     for(int j = index_start; j < index_stop; j++){
         if(i < d[j]){
-            c += w[j] * PRE(Xs[i - 1][n][0], 0.0);
+            c += w[j] * PRE(Xs[i - 1][n][0], static_cast<f24>(0.0));
         } else{
             if(d[j] == 0)   c += w[j] * PRE(Xs[i - 1][n][0], Xs[i - 1][col[j]][0]);
             else            c += w[j] * PRE(Xs[i - 1][n][0], Xs[i - d[j]][col[j]][0]);
